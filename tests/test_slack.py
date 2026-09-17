@@ -12,6 +12,8 @@ from shotlist.models import ShotList
 from shotlist.jobs import JobError, JobRecord, JobStatus
 from shotlist.api import create_app
 from shotlist.render import render_markdown
+from slack_sdk.errors import SlackApiError
+
 from shotlist.slack_app import (
     SLACK_COMMAND_PATH,
     SLACK_RESPONSE_URL_TIMEOUT_SEC,
@@ -106,6 +108,48 @@ async def test_execute_slack_analyze_posts_rendered_shots(
     upload_mock.assert_awaited_once()
     assert len(posts) == 1
     assert "shot-list.md" in posts[0]
+
+
+@pytest.mark.asyncio
+async def test_upload_shot_list_files_falls_back_to_dm(
+    sample_shot_list: ShotList, tmp_path: Path
+) -> None:
+    out = tmp_path
+    (out / "shot-list.json").write_text(
+        sample_shot_list.model_dump_json(indent=2), encoding="utf-8"
+    )
+    (out / "shot-list.md").write_text(
+        render_markdown(sample_shot_list), encoding="utf-8"
+    )
+    posted: list[str] = []
+
+    async def fake_post(
+        _client: object, channel_id: str, _output_dir: Path, _shot_list: ShotList
+    ) -> None:
+        posted.append(channel_id)
+        if channel_id == "CCHAN":
+            raise SlackApiError(
+                message="not in channel",
+                response={"ok": False, "error": "not_in_channel"},
+            )
+
+    slack_client = AsyncMock()
+    with patch("shotlist.slack_app.AsyncWebClient", return_value=slack_client):
+        with patch("shotlist.slack_app._post_files_to_channel", side_effect=fake_post):
+            with patch(
+                "shotlist.slack_app._open_dm_channel",
+                new=AsyncMock(return_value="D_DM"),
+            ):
+                landed = await upload_shot_list_files(
+                    "CCHAN",
+                    out,
+                    sample_shot_list,
+                    bot_token="xoxb-test",
+                    user_id="U1",
+                )
+
+    assert landed == "D_DM"
+    assert posted == ["CCHAN", "D_DM"]
 
 
 @pytest.mark.asyncio

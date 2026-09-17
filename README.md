@@ -67,7 +67,7 @@ For long YouTube runs, prefer `wait=false` and poll so proxies do not time out t
 
 ### Slack `/analyze` (DIS-16, optional)
 
-When Slack env vars are set, the same FastAPI process handles a slash command that runs the **same** analyze job as HTTP/CLI. The command acks within 3 seconds with an ephemeral “Analyzing…” message; when the job finishes, **`shot-list.md` and `shot-list.json` are uploaded to the channel** (visible to everyone there) and you get a short ephemeral confirmation. Requires `files:write` on the bot (see `manifest.json`).
+When Slack env vars are set, the same FastAPI process handles a slash command that runs the **same** analyze job as HTTP/CLI. The command acks within 3 seconds with an ephemeral “Analyzing…” message; when the job finishes, **`shot-list.md` and `shot-list.json` are uploaded to the channel** (the bot auto-joins public channels; in private channels it falls back to your DM unless you `/invite` the app). Requires `files:write` and `channels:join` on the bot (see `manifest.json`).
 
 **Slack CLI (create app from repo manifest):** install the [Slack CLI](https://docs.slack.dev/tools/slack-cli/guides/installing-the-slack-cli-for-mac-and-linux/) (`~/.local/bin/slack`), then from this repo:
 

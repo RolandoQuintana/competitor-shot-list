@@ -26,6 +26,7 @@
     "scopes": {
       "bot": [
         "commands",
+        "channels:join",
         "chat:write",
         "files:write",
         "im:write"

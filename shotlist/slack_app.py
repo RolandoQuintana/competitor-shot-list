@@ -16,6 +16,7 @@ from starlette.requests import Request
 from shotlist.config import Settings, get_settings
 from shotlist.jobs import AnalyzeJobRequest, JobStatus, job_store
 from shotlist.models import ShotList
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web.async_client import AsyncWebClient
 
 if TYPE_CHECKING:
@@ -85,14 +86,17 @@ async def post_response_url(
         response.raise_for_status()
 
 
-async def upload_shot_list_files(
+async def _open_dm_channel(client: AsyncWebClient, user_id: str) -> str:
+    response = await client.conversations_open(users=user_id)
+    return response["channel"]["id"]
+
+
+async def _post_files_to_channel(
+    client: AsyncWebClient,
     channel_id: str,
     output_dir: Path,
     shot_list: ShotList,
-    *,
-    bot_token: str,
 ) -> None:
-    """Share shot-list.md and shot-list.json in the channel where /analyze was run."""
     md_path = output_dir / "shot-list.md"
     json_path = output_dir / "shot-list.json"
     if not md_path.is_file() or not json_path.is_file():
@@ -103,7 +107,6 @@ async def upload_shot_list_files(
         f"Shot list for *{title}* · {shot_list.video.channel} · "
         f"{shot_list.video.duration_sec:g}s · <{shot_list.video.url}|YouTube>"
     )
-    client = AsyncWebClient(token=bot_token)
     await client.files_upload_v2(
         channel=channel_id,
         initial_comment=comment,
@@ -118,11 +121,42 @@ async def upload_shot_list_files(
     )
 
 
+async def upload_shot_list_files(
+    channel_id: str,
+    output_dir: Path,
+    shot_list: ShotList,
+    *,
+    bot_token: str,
+    user_id: str | None = None,
+) -> str:
+    """
+    Share shot-list.md and shot-list.json in the slash-command channel.
+
+    Joins public channels when needed; falls back to the user's DM if the bot
+    cannot post in a private channel. Returns the channel id where files landed.
+    """
+    client = AsyncWebClient(token=bot_token)
+
+    with suppress(SlackApiError):
+        await client.conversations_join(channel=channel_id)
+
+    try:
+        await _post_files_to_channel(client, channel_id, output_dir, shot_list)
+        return channel_id
+    except SlackApiError as exc:
+        if exc.response.get("error") != "not_in_channel" or not user_id:
+            raise
+        dm_channel = await _open_dm_channel(client, user_id)
+        await _post_files_to_channel(client, dm_channel, output_dir, shot_list)
+        return dm_channel
+
+
 async def execute_slack_analyze(
     url: str,
     response_url: str,
     *,
     channel_id: str,
+    user_id: str | None = None,
     settings: Settings | None = None,
     slack_settings: SlackSettings | None = None,
 ) -> None:
@@ -148,19 +182,25 @@ async def execute_slack_analyze(
             )
             return
         shot_list = load_shot_list_from_output(record.output_dir)
-        await upload_shot_list_files(
+        posted_channel = await upload_shot_list_files(
             channel_id,
             record.output_dir,
             shot_list,
             bot_token=slack_settings.bot_token,
+            user_id=user_id,
         )
-        await post_response_url(
-            response_url,
-            (
+        if posted_channel == channel_id:
+            done = (
                 f"Done — posted `shot-list.md` and `shot-list.json` for "
                 f"*{shot_list.video.title}* in this channel."
-            ),
-        )
+            )
+        else:
+            done = (
+                f"Done — posted `shot-list.md` and `shot-list.json` for "
+                f"*{shot_list.video.title}* in your DM with this app "
+                f"(the bot is not in this channel; `/invite` it here to share files in-channel)."
+            )
+        await post_response_url(response_url, done)
     except Exception as exc:  # noqa: BLE001
         await post_response_url(response_url, f"Analysis failed: {exc}")
 
@@ -192,6 +232,7 @@ def build_slack_bolt_app(settings: SlackSettings) -> AsyncApp:
                 url,
                 response_url,
                 channel_id=command["channel_id"],
+                user_id=command.get("user_id"),
                 slack_settings=settings,
             ),
             name="slack-analyze",
