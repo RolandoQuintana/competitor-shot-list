@@ -20,5 +20,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["shotlist"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"shotlist/fixtures/ci-sample.mp4" = "shotlist/fixtures/ci-sample.mp4"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: full mock analyze on bundled fixture media (requires ffmpeg)",
+]

@@ -28,3 +28,21 @@ pip install -e ".[dev]"
 pytest
 python -m shotlist --help
 ```
+
+### CI-safe mock analyze (DIS-12)
+
+Bundled fixture media under `shotlist/fixtures/ci-sample.mp4` — no YouTube, no OpenRouter. Uses FFmpeg for frames, `TRANSCRIPT_BACKEND=stub`, and `VISION_BACKEND=mock`.
+
+```bash
+make test-integration
+# or
+VISION_BACKEND=mock TRANSCRIPT_BACKEND=stub pytest -m integration
+```
+
+Inside Docker:
+
+```bash
+docker compose run --rm api python -m shotlist analyze --fixture
+```
+
+Artifacts land under `./output/ci-sample/` on the host bind mount.

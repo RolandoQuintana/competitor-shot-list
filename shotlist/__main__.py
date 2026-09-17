@@ -6,6 +6,9 @@ import argparse
 import sys
 from importlib.metadata import version
 
+from shotlist.errors import EmptyShotsError, PipelineError
+from shotlist.pipeline import analyze_fixture
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -22,7 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
         "analyze",
         help="Analyze a YouTube Short URL and write shot-list artifacts",
     )
-    analyze.add_argument("url", help="Public YouTube Short URL")
+    analyze.add_argument(
+        "url",
+        nargs="?",
+        default=None,
+        help="Public YouTube Short URL (not used with --fixture)",
+    )
+    analyze.add_argument(
+        "--fixture",
+        action="store_true",
+        help="Run mock end-to-end analyze on bundled CI sample media",
+    )
     return parser
 
 
@@ -33,8 +46,25 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     if args.command == "analyze":
+        if args.fixture:
+            try:
+                out = analyze_fixture()
+            except EmptyShotsError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            except PipelineError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            except Exception as exc:  # noqa: BLE001
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(out)
+            return 0
+        if not args.url:
+            print("analyze: provide a URL or --fixture", file=sys.stderr)
+            return 2
         print(
-            "analyze pipeline not implemented yet; use Docker shell to verify install",
+            "YouTube analyze not implemented yet; use --fixture for CI mock path",
             file=sys.stderr,
         )
         return 2
