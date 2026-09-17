@@ -1,8 +1,10 @@
-"""Shared OpenRouter chat-completions client."""
+"""Shared OpenRouter HTTP clients (chat + speech-to-text)."""
 
 from __future__ import annotations
 
 import asyncio
+import base64
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -84,3 +86,50 @@ async def chat_completion(
         timeout_sec=timeout_sec,
         max_retries=max_retries,
     )
+
+
+async def post_audio_transcription(
+    settings: Settings,
+    wav_path: Path,
+    *,
+    timeout_sec: float = 120.0,
+    max_retries: int = 8,
+) -> dict[str, Any]:
+    """POST /audio/transcriptions and return the JSON body (verbose_json)."""
+    base = settings.openrouter_base_url.rstrip("/")
+    headers = openrouter_headers(settings)
+    audio_b64 = base64.standard_b64encode(wav_path.read_bytes()).decode("ascii")
+    payload: dict[str, Any] = {
+        "model": settings.openrouter_transcription_model,
+        "input_audio": {"data": audio_b64, "format": "wav"},
+        "response_format": "verbose_json",
+        "timestamp_granularities": ["segment"],
+    }
+    last_err: str | None = None
+
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                resp = await client.post(
+                    f"{base}/audio/transcriptions",
+                    json=payload,
+                    headers=headers,
+                )
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after else min(2**attempt, 60)
+                last_err = f"HTTP 429 rate limited (retry in {wait:.0f}s)"
+                await asyncio.sleep(wait)
+                continue
+            if resp.status_code >= 400:
+                last_err = f"HTTP {resp.status_code}: {resp.text[:300]}"
+                resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, dict):
+                raise TypeError(f"expected object response, got {type(data).__name__}")
+            return data
+        except Exception as exc:  # noqa: BLE001
+            last_err = str(exc)
+            await asyncio.sleep(min(2**attempt, 60))
+
+    raise RuntimeError(last_err or "OpenRouter transcription failed after retries")

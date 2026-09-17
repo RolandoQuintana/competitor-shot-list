@@ -11,12 +11,21 @@ import pytest
 from shotlist.models import ShotList
 from shotlist.jobs import JobError, JobRecord, JobStatus
 from shotlist.api import create_app
+from shotlist.render import render_markdown
 from shotlist.slack_app import (
     SLACK_COMMAND_PATH,
     SLACK_RESPONSE_URL_TIMEOUT_SEC,
+    SlackSettings,
     execute_slack_analyze,
     parse_analyze_url,
     post_response_url,
+    upload_shot_list_files,
+)
+
+_TEST_SLACK = SlackSettings(
+    bot_token="xoxb-test",
+    signing_secret=None,
+    app_token="xapp-test",
 )
 
 
@@ -66,6 +75,9 @@ async def test_execute_slack_analyze_posts_rendered_shots(
     (out / "shot-list.json").write_text(
         sample_shot_list.model_dump_json(indent=2), encoding="utf-8"
     )
+    (out / "shot-list.md").write_text(
+        render_markdown(sample_shot_list), encoding="utf-8"
+    )
     record = JobRecord(
         job_id="j1",
         status=JobStatus.COMPLETED,
@@ -74,18 +86,26 @@ async def test_execute_slack_analyze_posts_rendered_shots(
     )
     posts: list[str] = []
 
-    async def capture_post(url: str, text: str, *, ephemeral: bool = True) -> None:
+    async def capture_post(
+        url: str, text: str, *, blocks: list | None = None, ephemeral: bool = True
+    ) -> None:
         posts.append(text)
 
     with patch("shotlist.slack_app.job_store.run_sync", new=AsyncMock(return_value=record)):
-        with patch("shotlist.slack_app.post_response_url", side_effect=capture_post):
-            await execute_slack_analyze(
-                "https://www.youtube.com/shorts/abc",
-                "https://hooks.slack.com/x",
-            )
+        with patch(
+            "shotlist.slack_app.upload_shot_list_files", new=AsyncMock()
+        ) as upload_mock:
+            with patch("shotlist.slack_app.post_response_url", side_effect=capture_post):
+                await execute_slack_analyze(
+                    "https://www.youtube.com/shorts/abc",
+                    "https://hooks.slack.com/x",
+                    channel_id="C123",
+                    slack_settings=_TEST_SLACK,
+                )
 
+    upload_mock.assert_awaited_once()
     assert len(posts) == 1
-    assert "Shot 1" in posts[0]
+    assert "shot-list.md" in posts[0]
 
 
 @pytest.mark.asyncio
@@ -105,6 +125,8 @@ async def test_execute_slack_analyze_surfaces_job_error() -> None:
             await execute_slack_analyze(
                 "https://example.com/x",
                 "https://hooks.slack.com/x",
+                channel_id="C123",
+                slack_settings=_TEST_SLACK,
             )
 
     assert posts == ["not a YouTube Short URL"]
@@ -123,6 +145,8 @@ async def test_execute_slack_analyze_failed_without_error_object() -> None:
             await execute_slack_analyze(
                 "https://www.youtube.com/shorts/abc",
                 "https://hooks.slack.com/x",
+                channel_id="C123",
+                slack_settings=_TEST_SLACK,
             )
 
     assert posts == ["Analysis failed."]
@@ -150,6 +174,8 @@ async def test_execute_slack_analyze_posts_when_output_missing(
             await execute_slack_analyze(
                 "https://www.youtube.com/shorts/abc",
                 "https://hooks.slack.com/x",
+                channel_id="C123",
+                slack_settings=_TEST_SLACK,
             )
 
     assert len(posts) == 1

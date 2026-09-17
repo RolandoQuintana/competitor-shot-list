@@ -45,9 +45,14 @@ def fixture_video_metadata(duration_sec: float) -> VideoMetadata:
 
 
 def _require_openrouter_key(settings: Settings) -> None:
-    if settings.vision_backend == "openrouter" and not settings.openrouter_api_key:
+    needs_key = (
+        settings.vision_backend == "openrouter"
+        or settings.transcript_backend == "openrouter"
+    )
+    if needs_key and not settings.openrouter_api_key:
         raise MissingOpenRouterApiKeyError(
-            "OPENROUTER_API_KEY is required when VISION_BACKEND=openrouter"
+            "OPENROUTER_API_KEY is required when VISION_BACKEND=openrouter "
+            "or TRANSCRIPT_BACKEND=openrouter"
         )
 
 
@@ -107,7 +112,7 @@ async def _analyze_local_video_impl(
             raise RuntimeError("FFmpeg produced no frames")
 
         capped_duration = min(duration, settings.max_video_duration_sec)
-        transcript = transcribe_audio(
+        transcript = await transcribe_audio(
             wav_path, settings, duration_sec=capped_duration
         )
         vision_lines, vision_errors = await _describe_frames(frames, settings)

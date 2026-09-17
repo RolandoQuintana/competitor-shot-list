@@ -1,11 +1,17 @@
-"""Audio transcription (Whisper or CI stub)."""
+"""Audio transcription (OpenRouter STT, local Whisper, or CI stub)."""
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from shotlist.config import Settings
+from shotlist.errors import TranscriptionError
+from shotlist.openrouter import post_audio_transcription
+
+_SUPPORTED_BACKENDS = frozenset({"stub", "whisper", "openrouter"})
 
 
 @dataclass(frozen=True)
@@ -25,12 +31,9 @@ def stub_transcript(duration_sec: float) -> TranscriptResult:
     )
 
 
-def transcribe_audio(
-    wav_path: Path, settings: Settings, *, duration_sec: float
+def _transcribe_whisper_local(
+    wav_path: Path, settings: Settings
 ) -> TranscriptResult:
-    if settings.transcript_backend == "stub":
-        return stub_transcript(duration_sec)
-
     from faster_whisper import WhisperModel
 
     model = WhisperModel(
@@ -50,6 +53,67 @@ def transcribe_audio(
         )
         parts.append(text)
     return TranscriptResult(full_text=" ".join(parts), segments=segments)
+
+
+def _segment_bounds(seg: dict[str, Any]) -> tuple[float, float]:
+    start = seg.get("start_sec", seg.get("start"))
+    end = seg.get("end_sec", seg.get("end"))
+    if start is None or end is None:
+        raise TranscriptionError("OpenRouter STT segment missing start/end timestamps")
+    return float(start), float(end)
+
+
+def transcript_from_verbose_json(data: dict[str, Any]) -> TranscriptResult:
+    """Map OpenRouter / OpenAI verbose_json STT into TranscriptResult."""
+    full_text = str(data.get("text") or "").strip()
+    segments: list[dict[str, float | str]] = []
+    for raw in data.get("segments") or []:
+        if not isinstance(raw, dict):
+            continue
+        text = str(raw.get("text") or "").strip()
+        if not text:
+            continue
+        start_sec, end_sec = _segment_bounds(raw)
+        segments.append(
+            {"start_sec": start_sec, "end_sec": end_sec, "text": text},
+        )
+    if not full_text and segments:
+        full_text = " ".join(str(s["text"]) for s in segments)
+    if full_text and not segments:
+        raise TranscriptionError(
+            "OpenRouter STT returned transcript text without timestamped segments"
+        )
+    return TranscriptResult(full_text=full_text, segments=segments)
+
+
+async def _transcribe_openrouter(
+    wav_path: Path, settings: Settings
+) -> TranscriptResult:
+    try:
+        data = await post_audio_transcription(
+            settings,
+            wav_path,
+            max_retries=settings.transcription_max_retries,
+        )
+    except RuntimeError as exc:
+        raise TranscriptionError(str(exc)) from exc
+    return transcript_from_verbose_json(data)
+
+
+async def transcribe_audio(
+    wav_path: Path, settings: Settings, *, duration_sec: float
+) -> TranscriptResult:
+    backend = settings.transcript_backend
+    if backend not in _SUPPORTED_BACKENDS:
+        raise ValueError(
+            f"Unsupported TRANSCRIPT_BACKEND={backend!r}; "
+            f"use one of {sorted(_SUPPORTED_BACKENDS)}"
+        )
+    if backend == "stub":
+        return stub_transcript(duration_sec)
+    if backend == "whisper":
+        return await asyncio.to_thread(_transcribe_whisper_local, wav_path, settings)
+    return await _transcribe_openrouter(wav_path, settings)
 
 
 def dialogue_for_interval(

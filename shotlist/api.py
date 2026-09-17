@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 from shotlist.config import get_settings
 from shotlist.jobs import AnalyzeJobRequest, JobRecord, JobStatus, job_store
 from shotlist.slack_app import (
+    create_slack_socket_handler,
     get_slack_settings,
     mount_slack_on_fastapi,
     stop_socket_mode,
@@ -22,7 +23,7 @@ from shotlist.slack_app import (
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    handler = getattr(app.state, "slack_socket_handler", None)
+    handler = create_slack_socket_handler(app)
     socket_task: asyncio.Task[None] | None = None
     if handler is not None:
         socket_task = asyncio.create_task(handler.start_async())
@@ -45,10 +46,7 @@ def create_app() -> FastAPI:
     )
     slack_settings = get_slack_settings()
     if slack_settings is not None:
-        _, socket_handler = mount_slack_on_fastapi(app, slack_settings)
-        app.state.slack_socket_handler = socket_handler
-    else:
-        app.state.slack_socket_handler = None
+        mount_slack_on_fastapi(app, slack_settings)
     return app
 
 

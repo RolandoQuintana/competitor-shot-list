@@ -202,6 +202,8 @@ def _shot_list_from_synthesis_payload(
             models={
                 "vision": settings.openrouter_vision_model,
                 "synthesis": settings.openrouter_synthesis_model,
+                "transcription": settings.openrouter_transcription_model,
+                "transcript_backend": settings.transcript_backend,
             },
         ),
         transcript=Transcript(full_text=transcript.full_text, segments=segments or None),

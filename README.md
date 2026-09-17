@@ -12,7 +12,7 @@ docker compose build
 docker compose run --rm api python -m shotlist analyze "<youtube-short-url>"
 ```
 
-Exit code `0` writes `shot-list.json` and `shot-list.md` under `./output/<video-id>/` on the host. Real runs use OpenRouter for per-frame vision (`OPENROUTER_VISION_MODEL`) and shot-list synthesis (`OPENROUTER_SYNTHESIS_MODEL`). Long jobs are capped by `JOB_TIMEOUT_SEC` (default 1800).
+Exit code `0` writes `shot-list.json` and `shot-list.md` under `./output/<video-id>/` on the host. Real runs use OpenRouter for speech-to-text (`OPENROUTER_TRANSCRIPTION_MODEL`), per-frame vision (`OPENROUTER_VISION_MODEL`), and shot-list synthesis (`OPENROUTER_SYNTHESIS_MODEL`). Long jobs are capped by `JOB_TIMEOUT_SEC` (default 1800).
 
 ```bash
 docker compose run --rm api python -m shotlist --help
@@ -67,7 +67,18 @@ For long YouTube runs, prefer `wait=false` and poll so proxies do not time out t
 
 ### Slack `/analyze` (DIS-16, optional)
 
-When Slack env vars are set, the same FastAPI process handles a slash command that runs the **same** analyze job as HTTP/CLI. The command acks within 3 seconds with an ephemeral “Analyzing…” message; results (or errors) are posted to Slack via `response_url` using the DIS-6 bullet renderer (12-shot cap).
+When Slack env vars are set, the same FastAPI process handles a slash command that runs the **same** analyze job as HTTP/CLI. The command acks within 3 seconds with an ephemeral “Analyzing…” message; when the job finishes, **`shot-list.md` and `shot-list.json` are uploaded to the channel** (visible to everyone there) and you get a short ephemeral confirmation. Requires `files:write` on the bot (see `manifest.json`).
+
+**Slack CLI (create app from repo manifest):** install the [Slack CLI](https://docs.slack.dev/tools/slack-cli/guides/installing-the-slack-cli-for-mac-and-linux/) (`~/.local/bin/slack`), then from this repo:
+
+```bash
+slack login
+pip install -e ".[dev]"   # slack-cli-hooks for CLI project validation
+slack manifest validate
+slack app install --environment local
+```
+
+Copy **Bot User OAuth Token** (`SLACK_BOT_TOKEN`) and an app-level token with `connections:write` (`SLACK_APP_TOKEN`) into `.env`, then `docker compose up --build`. Alternatively, create the app from `manifest.json` at [api.slack.com/apps/new](https://api.slack.com/apps/new) → “From an app manifest”.
 
 **Local development (Socket Mode — recommended):** no public HTTPS URL required.
 
@@ -83,9 +94,9 @@ With Socket Mode, start the API as usual (`python -m shotlist serve` or `docker 
 
 Artifacts are written to `./output` on the host. Whisper / Hugging Face hub downloads are cached in the named Compose volume `whisper-cache` (`HF_HOME` inside the container).
 
-Analyze flow: yt-dlp acquire → FFmpeg frames/audio → Whisper transcript → OpenRouter vision → OpenRouter synthesis → persist.
+Analyze flow: yt-dlp acquire → FFmpeg frames/audio → OpenRouter transcription → OpenRouter vision → OpenRouter synthesis → persist.
 
-For a vision-free smoke test, set `VISION_BACKEND=mock` in `.env`. Videos longer than `MAX_VIDEO_DURATION_SEC` (default 90s) are rejected before synthesis.
+For a vision-free smoke test, set `VISION_BACKEND=mock` in `.env`. For offline transcription, set `TRANSCRIPT_BACKEND=whisper`. Videos longer than `MAX_VIDEO_DURATION_SEC` (default 55s) are rejected before synthesis.
 
 ### YouTube / Terms of Service
 

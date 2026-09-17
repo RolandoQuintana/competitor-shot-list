@@ -42,6 +42,29 @@ async def test_analyze_requires_openrouter_key_when_not_mock(
 
 
 @pytest.mark.asyncio
+async def test_analyze_requires_openrouter_key_for_transcription(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    settings = replace(
+        _base_settings(),
+        vision_backend="mock",
+        transcript_backend="openrouter",
+        openrouter_api_key=None,
+        output_dir=tmp_path,
+    )
+    video_path = tmp_path / "v.mp4"
+    video_path.write_bytes(b"x")
+
+    with pytest.raises(MissingOpenRouterApiKeyError, match="TRANSCRIPT_BACKEND=openrouter"):
+        await analyze_local_video(
+            video_path,
+            fixture_video_metadata(1.0),
+            settings=settings,
+        )
+
+
+@pytest.mark.asyncio
 async def test_job_timeout_raises(tmp_path: Path) -> None:
     settings = replace(
         _base_settings(),

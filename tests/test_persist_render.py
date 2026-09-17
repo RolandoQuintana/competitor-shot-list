@@ -52,12 +52,11 @@ def test_slack_renderer_caps_at_twelve_shots() -> None:
         shots=shots,
     )
     text = render_slack(shot_list)
-    bullet_lines = [ln for ln in text.splitlines() if ln.startswith("•")]
-    assert len(bullet_lines) == 12
-    assert "_+3 more — see shot-list in output/_" in text
+    assert text.count("visual ") == 12
+    assert "+3 more shots — see shot-list.json in output/" in text
 
 
 def test_slack_under_cap_no_suffix(minimal_shot_list: ShotList) -> None:
     text = render_slack(minimal_shot_list)
     assert "more — see shot-list" not in text
-    assert "Shot 1" in text
+    assert "0–1s" in text or "Time" in text

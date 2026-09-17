@@ -44,8 +44,14 @@ class SynthesisError(PipelineError):
     api_code = "synthesis_error"
 
 
+class TranscriptionError(PipelineError):
+    """Speech-to-text failed after retries or returned an unusable transcript."""
+
+    api_code = "transcription_error"
+
+
 class MissingOpenRouterApiKeyError(PipelineError):
-    """OPENROUTER_API_KEY required for the configured vision backend."""
+    """OPENROUTER_API_KEY required for OpenRouter vision or transcription."""
 
     api_code = "missing_openrouter_api_key"
     http_status = 400

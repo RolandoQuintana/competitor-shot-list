@@ -38,8 +38,10 @@ class Settings:
     openrouter_base_url: str
     openrouter_vision_model: str
     openrouter_synthesis_model: str
+    openrouter_transcription_model: str
     openrouter_http_referer: str | None
     openrouter_app_title: str
+    transcription_max_retries: int
     vision_prompt: str
     vision_request_delay_sec: float
     vision_max_retries: int
@@ -57,9 +59,9 @@ def get_settings() -> Settings:
         output_dir=Path(output),
         scratch_dir=Path(scratch),
         vision_backend=os.environ.get("VISION_BACKEND", "openrouter").lower(),
-        transcript_backend=os.environ.get("TRANSCRIPT_BACKEND", "whisper").lower(),
+        transcript_backend=os.environ.get("TRANSCRIPT_BACKEND", "openrouter").lower(),
         frame_interval_sec=_env_float("FRAME_INTERVAL_SEC", 1.0),
-        max_video_duration_sec=_env_float("MAX_VIDEO_DURATION_SEC", 90.0),
+        max_video_duration_sec=_env_float("MAX_VIDEO_DURATION_SEC", 55.0),
         frame_long_edge_px=_env_int("FRAME_LONG_EDGE_PX", 768),
         frame_jpeg_quality=_env_int("FRAME_JPEG_QUALITY", 85),
         whisper_model=os.environ.get("WHISPER_MODEL", "small"),
@@ -75,6 +77,9 @@ def get_settings() -> Settings:
         openrouter_synthesis_model=os.environ.get(
             "OPENROUTER_SYNTHESIS_MODEL", "openai/gpt-4o-mini"
         ),
+        openrouter_transcription_model=os.environ.get(
+            "OPENROUTER_TRANSCRIPTION_MODEL", "openai/whisper-large-v3"
+        ),
         openrouter_http_referer=referer,
         openrouter_app_title=os.environ.get(
             "OPENROUTER_APP_TITLE", "competitor-shot-list"
@@ -88,5 +93,6 @@ def get_settings() -> Settings:
         vision_max_retries=_env_int("VISION_MAX_RETRIES", 8),
         vision_concurrency=_env_int("VISION_CONCURRENCY", 1),
         synthesis_max_retries=_env_int("SYNTHESIS_MAX_RETRIES", 3),
+        transcription_max_retries=_env_int("TRANSCRIPTION_MAX_RETRIES", 8),
         job_timeout_sec=_env_float("JOB_TIMEOUT_SEC", 1800.0),
     )
