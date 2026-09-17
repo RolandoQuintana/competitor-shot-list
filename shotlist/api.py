@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -11,12 +13,46 @@ from pydantic import BaseModel, Field, model_validator
 
 from shotlist.config import get_settings
 from shotlist.jobs import AnalyzeJobRequest, JobRecord, JobStatus, job_store
-
-app = FastAPI(
-    title="competitor-shot-list",
-    description="YouTube Short → shot-list.json + shot-list.md",
-    version="0.1.0",
+from shotlist.slack_app import (
+    get_slack_settings,
+    mount_slack_on_fastapi,
+    stop_socket_mode,
 )
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    handler = getattr(app.state, "slack_socket_handler", None)
+    socket_task: asyncio.Task[None] | None = None
+    if handler is not None:
+        socket_task = asyncio.create_task(handler.start_async())
+    try:
+        yield
+    finally:
+        await stop_socket_mode(handler)
+        if socket_task is not None:
+            socket_task.cancel()
+            with asyncio.suppress(asyncio.CancelledError):
+                await socket_task
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="competitor-shot-list",
+        description="YouTube Short → shot-list.json + shot-list.md",
+        version="0.1.0",
+        lifespan=_lifespan,
+    )
+    slack_settings = get_slack_settings()
+    if slack_settings is not None:
+        _, socket_handler = mount_slack_on_fastapi(app, slack_settings)
+        app.state.slack_socket_handler = socket_handler
+    else:
+        app.state.slack_socket_handler = None
+    return app
+
+
+app = create_app()
 
 
 @app.exception_handler(StarletteHTTPException)

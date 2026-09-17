@@ -65,6 +65,22 @@ curl -sS -X POST 'http://localhost:8000/analyze?wait=true' \
 
 For long YouTube runs, prefer `wait=false` and poll so proxies do not time out the connection.
 
+### Slack `/analyze` (DIS-16, optional)
+
+When Slack env vars are set, the same FastAPI process handles a slash command that runs the **same** analyze job as HTTP/CLI. The command acks within 3 seconds with an ephemeral “Analyzing…” message; results (or errors) are posted to Slack via `response_url` using the DIS-6 bullet renderer (12-shot cap).
+
+**Local development (Socket Mode — recommended):** no public HTTPS URL required.
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `SLACK_BOT_TOKEN` | Yes | Bot token (`xoxb-…`) |
+| `SLACK_APP_TOKEN` | Yes (Socket Mode) | App-level token (`xapp-…`) with connections:write |
+| `SLACK_SIGNING_SECRET` | Yes (HTTP Request URL) | Verifies slash-command POSTs to the app |
+
+With Socket Mode, start the API as usual (`python -m shotlist serve` or `docker compose up`). Bolt connects outbound to Slack; you do **not** need to expose `/slack/commands` on the public internet.
+
+**Hosted HTTPS (nice-to-have):** configure the slash command Request URL to `https://<host>/slack/commands` and set `SLACK_SIGNING_SECRET` + `SLACK_BOT_TOKEN`. You can use Socket Mode and HTTP together, but pick one transport per workspace to avoid duplicate handling.
+
 Artifacts are written to `./output` on the host. Whisper / Hugging Face hub downloads are cached in the named Compose volume `whisper-cache` (`HF_HOME` inside the container).
 
 Analyze flow: yt-dlp acquire → FFmpeg frames/audio → Whisper transcript → OpenRouter vision → OpenRouter synthesis → persist.
