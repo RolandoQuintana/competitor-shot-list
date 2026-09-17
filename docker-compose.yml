@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HF_HOME: /cache/huggingface
+      OUTPUT_DIR: /app/output
+    volumes:
+      - ./output:/app/output
+      - whisper-cache:/cache/huggingface
+    ports:
+      - "${PORT:-8000}:8000"
+
+volumes:
+  whisper-cache:
