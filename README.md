@@ -18,6 +18,53 @@ Exit code `0` writes `shot-list.json` and `shot-list.md` under `./output/<video-
 docker compose run --rm api python -m shotlist --help
 ```
 
+### HTTP API (DIS-14)
+
+Start the API on the host (default `http://localhost:8000`):
+
+```bash
+docker compose up --build
+```
+
+Health check:
+
+```bash
+curl -sS http://localhost:8000/health
+```
+
+Enqueue an analyze job (returns `202` with a `job_id`; poll status until `completed` or `failed`):
+
+```bash
+curl -sS -X POST 'http://localhost:8000/analyze?wait=false' \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"<youtube-short-url>"}'
+
+curl -sS "http://localhost:8000/jobs/<job_id>"
+```
+
+CI-safe mock run (no YouTube, no OpenRouter):
+
+```bash
+curl -sS -X POST 'http://localhost:8000/analyze?wait=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"fixture":true}'
+```
+
+Block until the pipeline finishes (`wait=true`; same artifacts as the CLI under `./output/<video-id>/`):
+
+```bash
+curl -sS -X POST 'http://localhost:8000/analyze?wait=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"<youtube-short-url>"}'
+```
+
+**Errors:** Every failed job includes a JSON `error` object with `code` and `message`.
+
+- **`POST /analyze?wait=true`** — failures use HTTP `400` (bad URL / config) or `422` (pipeline failures such as timeouts or empty shots), with `error` at the top level of the response body.
+- **`POST /analyze?wait=false` + `GET /jobs/<job_id>`** — polling always uses HTTP `200`; check `status` (`failed`) and read `error` from the job JSON. Same `error` shape as sync mode, without remapping to 4xx on GET.
+
+For long YouTube runs, prefer `wait=false` and poll so proxies do not time out the connection.
+
 Artifacts are written to `./output` on the host. Whisper / Hugging Face hub downloads are cached in the named Compose volume `whisper-cache` (`HF_HOME` inside the container).
 
 Analyze flow: yt-dlp acquire → FFmpeg frames/audio → Whisper transcript → OpenRouter vision → OpenRouter synthesis → persist.

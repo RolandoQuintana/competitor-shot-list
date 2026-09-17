@@ -10,6 +10,7 @@ from shotlist.errors import (
     EmptyShotsError,
     InvalidVideoUrlError,
     JobTimeoutError,
+    MissingOpenRouterApiKeyError,
     PipelineError,
     SynthesisError,
     VideoTooLongError,
@@ -43,6 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run mock end-to-end analyze on bundled CI sample media",
     )
+    subparsers.add_parser(
+        "serve",
+        help="Run the HTTP API (FastAPI + uvicorn)",
+    )
     return parser
 
 
@@ -72,14 +77,15 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             out = analyze_youtube_url(args.url)
-        except (InvalidVideoUrlError, VideoTooLongError, JobTimeoutError, SynthesisError) as exc:
+        except (
+            InvalidVideoUrlError,
+            VideoTooLongError,
+            JobTimeoutError,
+            SynthesisError,
+            MissingOpenRouterApiKeyError,
+        ) as exc:
             print(str(exc), file=sys.stderr)
             return 1
-        except ValueError as exc:
-            if "OPENROUTER_API_KEY" in str(exc):
-                print(str(exc), file=sys.stderr)
-                return 1
-            raise
         except EmptyShotsError as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -91,6 +97,24 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(out)
         return 0
+    if args.command == "serve":
+        return serve()
+    return 0
+
+
+def serve() -> int:
+    import os
+
+    import uvicorn
+
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(
+        "shotlist.api:app",
+        host=host,
+        port=port,
+        log_level=os.environ.get("LOG_LEVEL", "info").lower(),
+    )
     return 0
 
 

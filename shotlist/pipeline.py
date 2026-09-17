@@ -12,7 +12,12 @@ from dataclasses import replace
 
 from shotlist.acquire import AcquiredVideo, acquire_youtube_short
 from shotlist.config import Settings, get_settings
-from shotlist.errors import EmptyShotsError, JobTimeoutError, VideoTooLongError
+from shotlist.errors import (
+    EmptyShotsError,
+    JobTimeoutError,
+    MissingOpenRouterApiKeyError,
+    VideoTooLongError,
+)
 from shotlist.media import extract_audio, extract_frames, probe_duration
 from shotlist.models import VideoMetadata
 from shotlist.persist import persist_shot_list
@@ -41,7 +46,7 @@ def fixture_video_metadata(duration_sec: float) -> VideoMetadata:
 
 def _require_openrouter_key(settings: Settings) -> None:
     if settings.vision_backend == "openrouter" and not settings.openrouter_api_key:
-        raise ValueError(
+        raise MissingOpenRouterApiKeyError(
             "OPENROUTER_API_KEY is required when VISION_BACKEND=openrouter"
         )
 

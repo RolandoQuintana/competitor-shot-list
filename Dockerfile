@@ -21,4 +21,4 @@ RUN pip install --upgrade pip \
 
 RUN mkdir -p /app/output
 
-CMD ["python", "-m", "shotlist", "--help"]
+CMD ["python", "-m", "shotlist", "serve"]

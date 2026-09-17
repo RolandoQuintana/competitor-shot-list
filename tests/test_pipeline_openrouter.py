@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from shotlist.config import Settings
-from shotlist.errors import JobTimeoutError
+from shotlist.errors import JobTimeoutError, MissingOpenRouterApiKeyError
 from shotlist.pipeline import analyze_local_video, fixture_video_metadata
 
 
@@ -33,7 +33,7 @@ async def test_analyze_requires_openrouter_key_when_not_mock(
     video_path = tmp_path / "v.mp4"
     video_path.write_bytes(b"x")
 
-    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+    with pytest.raises(MissingOpenRouterApiKeyError, match="OPENROUTER_API_KEY"):
         await analyze_local_video(
             video_path,
             fixture_video_metadata(1.0),
