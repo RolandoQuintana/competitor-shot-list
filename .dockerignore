@@ -1,9 +1,11 @@
-.env
 .venv/
+.git/
+.pytest_cache/
 __pycache__/
 *.py[cod]
-.pytest_cache/
 output/
 *.egg-info/
 dist/
-.slack/
+.env
+.env.*
+!.env.example
