@@ -10,8 +10,9 @@ from pathlib import Path
 
 from dataclasses import replace
 
+from shotlist.acquire import AcquiredVideo, acquire_youtube_short
 from shotlist.config import Settings, get_settings
-from shotlist.errors import EmptyShotsError
+from shotlist.errors import EmptyShotsError, VideoTooLongError
 from shotlist.media import extract_audio, extract_frames, probe_duration
 from shotlist.models import VideoMetadata
 from shotlist.persist import persist_shot_list
@@ -65,12 +66,14 @@ async def analyze_local_video(
     Returns the output directory for the video id.
     """
     settings = settings or get_settings()
-    work = Path(tempfile.mkdtemp(prefix="shotlist-", dir="/tmp"))
+    scratch_root = settings.scratch_dir
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="job-", dir=str(scratch_root)))
 
     try:
         duration = probe_duration(video_path)
         if duration > settings.max_video_duration_sec:
-            raise ValueError(
+            raise VideoTooLongError(
                 f"Video duration {duration:.1f}s exceeds max "
                 f"{settings.max_video_duration_sec}s"
             )
@@ -119,6 +122,20 @@ def ci_fixture_settings(settings: Settings | None = None) -> Settings:
         vision_backend="mock",
         transcript_backend="stub",
     )
+
+
+def analyze_youtube_url(url: str, settings: Settings | None = None) -> Path:
+    """Acquire a public Short via yt-dlp, then run local media prep and persist."""
+    settings = settings or get_settings()
+    acquired: AcquiredVideo | None = None
+    try:
+        acquired = acquire_youtube_short(url, settings)
+        return asyncio.run(
+            analyze_local_video(acquired.video_path, acquired.metadata, settings)
+        )
+    finally:
+        if acquired is not None:
+            shutil.rmtree(acquired.scratch_dir, ignore_errors=True)
 
 
 def analyze_fixture(settings: Settings | None = None) -> Path:

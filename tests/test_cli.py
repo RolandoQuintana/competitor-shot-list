@@ -27,3 +27,9 @@ def test_version_exits_zero() -> None:
     result = run_shotlist("--version")
     assert result.returncode == 0
     assert "0.1.0" in result.stdout
+
+
+def test_analyze_rejects_invalid_url() -> None:
+    result = run_shotlist("analyze", "https://example.com/not-youtube")
+    assert result.returncode == 1
+    assert "YouTube" in result.stderr

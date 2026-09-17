@@ -6,8 +6,13 @@ import argparse
 import sys
 from importlib.metadata import version
 
-from shotlist.errors import EmptyShotsError, PipelineError
-from shotlist.pipeline import analyze_fixture
+from shotlist.errors import (
+    EmptyShotsError,
+    InvalidVideoUrlError,
+    PipelineError,
+    VideoTooLongError,
+)
+from shotlist.pipeline import analyze_fixture, analyze_youtube_url
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -63,11 +68,22 @@ def main(argv: list[str] | None = None) -> int:
         if not args.url:
             print("analyze: provide a URL or --fixture", file=sys.stderr)
             return 2
-        print(
-            "YouTube analyze not implemented yet; use --fixture for CI mock path",
-            file=sys.stderr,
-        )
-        return 2
+        try:
+            out = analyze_youtube_url(args.url)
+        except (InvalidVideoUrlError, VideoTooLongError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        except EmptyShotsError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        except PipelineError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        except Exception as exc:  # noqa: BLE001
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(out)
+        return 0
     return 0
 
 

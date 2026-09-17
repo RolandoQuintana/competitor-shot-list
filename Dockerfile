@@ -4,6 +4,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+ENV SCRATCH_DIR=/tmp/shotlist
+
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \

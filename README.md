@@ -14,11 +14,17 @@ docker compose run --rm api python -m shotlist --help
 
 Artifacts are written to `./output` on the host. Whisper / Hugging Face hub downloads are cached in the named Compose volume `whisper-cache` (`HF_HOME` inside the container).
 
-Target flow once the pipeline is wired:
+Analyze a public YouTube Short (downloads via yt-dlp into `/tmp/shotlist/` inside the container, then FFmpeg + Whisper):
 
 ```bash
 docker compose run --rm api python -m shotlist analyze "<youtube-short-url>"
 ```
+
+For a vision-free smoke test, set `VISION_BACKEND=mock` in `.env`. Videos longer than `MAX_VIDEO_DURATION_SEC` (default 90s) are rejected before synthesis.
+
+### YouTube / Terms of Service
+
+This tool uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) to download **public** URLs you supply for analysis. You are responsible for complying with [YouTube’s Terms of Service](https://www.youtube.com/t/terms) and applicable copyright law; use only content you have the right to process.
 
 ## Development
 

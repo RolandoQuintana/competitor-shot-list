@@ -24,6 +24,7 @@ def _env_int(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     output_dir: Path
+    scratch_dir: Path
     vision_backend: str
     transcript_backend: str
     frame_interval_sec: float
@@ -37,8 +38,10 @@ class Settings:
 
 def get_settings() -> Settings:
     output = os.environ.get("OUTPUT_DIR", "./output")
+    scratch = os.environ.get("SCRATCH_DIR", "/tmp/shotlist")
     return Settings(
         output_dir=Path(output),
+        scratch_dir=Path(scratch),
         vision_backend=os.environ.get("VISION_BACKEND", "openrouter").lower(),
         transcript_backend=os.environ.get("TRANSCRIPT_BACKEND", "whisper").lower(),
         frame_interval_sec=_env_float("FRAME_INTERVAL_SEC", 1.0),
