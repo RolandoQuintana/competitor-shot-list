@@ -9,7 +9,9 @@ from importlib.metadata import version
 from shotlist.errors import (
     EmptyShotsError,
     InvalidVideoUrlError,
+    JobTimeoutError,
     PipelineError,
+    SynthesisError,
     VideoTooLongError,
 )
 from shotlist.pipeline import analyze_fixture, analyze_youtube_url
@@ -70,9 +72,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             out = analyze_youtube_url(args.url)
-        except (InvalidVideoUrlError, VideoTooLongError) as exc:
+        except (InvalidVideoUrlError, VideoTooLongError, JobTimeoutError, SynthesisError) as exc:
             print(str(exc), file=sys.stderr)
             return 1
+        except ValueError as exc:
+            if "OPENROUTER_API_KEY" in str(exc):
+                print(str(exc), file=sys.stderr)
+                return 1
+            raise
         except EmptyShotsError as exc:
             print(str(exc), file=sys.stderr)
             return 1

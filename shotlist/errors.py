@@ -15,3 +15,11 @@ class InvalidVideoUrlError(PipelineError):
 
 class VideoTooLongError(PipelineError):
     """Video duration exceeds MAX_VIDEO_DURATION_SEC."""
+
+
+class JobTimeoutError(PipelineError):
+    """Analyze job exceeded JOB_TIMEOUT_SEC."""
+
+
+class SynthesisError(PipelineError):
+    """LLM synthesis or JSON structuring failed after retries."""

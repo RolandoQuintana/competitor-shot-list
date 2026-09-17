@@ -12,11 +12,11 @@ from dataclasses import replace
 
 from shotlist.acquire import AcquiredVideo, acquire_youtube_short
 from shotlist.config import Settings, get_settings
-from shotlist.errors import EmptyShotsError, VideoTooLongError
+from shotlist.errors import EmptyShotsError, JobTimeoutError, VideoTooLongError
 from shotlist.media import extract_audio, extract_frames, probe_duration
 from shotlist.models import VideoMetadata
 from shotlist.persist import persist_shot_list
-from shotlist.synthesis import synthesize_shot_list
+from shotlist.synthesis import synthesize_shot_list, synthesize_shot_list_openrouter
 from shotlist.transcribe import transcribe_audio
 from shotlist.vision import create_vision_backend
 
@@ -39,33 +39,42 @@ def fixture_video_metadata(duration_sec: float) -> VideoMetadata:
     )
 
 
-async def _describe_frames(frame_paths: list[Path], settings: Settings) -> list[str]:
+def _require_openrouter_key(settings: Settings) -> None:
+    if settings.vision_backend == "openrouter" and not settings.openrouter_api_key:
+        raise ValueError(
+            "OPENROUTER_API_KEY is required when VISION_BACKEND=openrouter"
+        )
+
+
+async def _describe_frames(
+    frame_paths: list[Path], settings: Settings
+) -> tuple[list[str], int]:
     backend = create_vision_backend(settings)
-    descriptions: list[str] = []
+    sem = asyncio.Semaphore(max(1, settings.vision_concurrency))
+    descriptions: list[str] = [""] * len(frame_paths)
     errors = 0
-    for path in frame_paths:
-        try:
-            text = await backend.describe_frame(str(path))
-            if text.startswith("[vision error]"):
+
+    async def one(idx: int, path: Path) -> None:
+        nonlocal errors
+        async with sem:
+            try:
+                text = await backend.describe_frame(str(path))
+                if text.startswith("[vision error]"):
+                    errors += 1
+                descriptions[idx] = text
+            except Exception as exc:  # noqa: BLE001
                 errors += 1
-            descriptions.append(text)
-        except Exception as exc:  # noqa: BLE001
-            errors += 1
-            descriptions.append(f"[vision error] {exc}")
-    return descriptions
+                descriptions[idx] = f"[vision error] {exc}"
+
+    await asyncio.gather(*(one(i, p) for i, p in enumerate(frame_paths)))
+    return descriptions, errors
 
 
-async def analyze_local_video(
+async def _analyze_local_video_impl(
     video_path: Path,
     video: VideoMetadata,
-    settings: Settings | None = None,
+    settings: Settings,
 ) -> Path:
-    """
-    Run media → transcript → mock vision → synthesis → persist.
-
-    Returns the output directory for the video id.
-    """
-    settings = settings or get_settings()
     scratch_root = settings.scratch_dir
     scratch_root.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="job-", dir=str(scratch_root)))
@@ -92,19 +101,33 @@ async def analyze_local_video(
         if not frames:
             raise RuntimeError("FFmpeg produced no frames")
 
+        capped_duration = min(duration, settings.max_video_duration_sec)
         transcript = transcribe_audio(
-            wav_path, settings, duration_sec=min(duration, settings.max_video_duration_sec)
+            wav_path, settings, duration_sec=capped_duration
         )
-        vision_lines = await _describe_frames(frames, settings)
+        vision_lines, vision_errors = await _describe_frames(frames, settings)
 
-        shot_list = synthesize_shot_list(
-            video=video,
-            duration_sec=min(duration, settings.max_video_duration_sec),
-            frame_interval_sec=settings.frame_interval_sec,
-            vision_descriptions=vision_lines,
-            transcript=transcript,
-            pipeline_version=settings.pipeline_version,
-        )
+        if settings.vision_backend == "mock":
+            shot_list = synthesize_shot_list(
+                video=video,
+                duration_sec=capped_duration,
+                frame_interval_sec=settings.frame_interval_sec,
+                vision_descriptions=vision_lines,
+                transcript=transcript,
+                pipeline_version=settings.pipeline_version,
+                vision_error_count=vision_errors,
+            )
+        else:
+            shot_list = await synthesize_shot_list_openrouter(
+                settings=settings,
+                video=video,
+                duration_sec=capped_duration,
+                frame_interval_sec=settings.frame_interval_sec,
+                vision_descriptions=vision_lines,
+                transcript=transcript,
+                pipeline_version=settings.pipeline_version,
+                vision_error_count=vision_errors,
+            )
 
         if not shot_list.shots:
             raise EmptyShotsError("synthesis produced empty shots[]")
@@ -112,6 +135,29 @@ async def analyze_local_video(
         return persist_shot_list(shot_list, settings.output_dir)
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+async def analyze_local_video(
+    video_path: Path,
+    video: VideoMetadata,
+    settings: Settings | None = None,
+) -> Path:
+    """
+    Run media → transcript → vision → synthesis → persist.
+
+    Returns the output directory for the video id.
+    """
+    settings = settings or get_settings()
+    _require_openrouter_key(settings)
+    try:
+        return await asyncio.wait_for(
+            _analyze_local_video_impl(video_path, video, settings),
+            timeout=settings.job_timeout_sec,
+        )
+    except TimeoutError:
+        raise JobTimeoutError(
+            f"analyze job exceeded JOB_TIMEOUT_SEC={settings.job_timeout_sec:g}"
+        ) from None
 
 
 def ci_fixture_settings(settings: Settings | None = None) -> Settings:

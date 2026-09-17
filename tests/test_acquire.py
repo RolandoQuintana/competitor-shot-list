@@ -1,6 +1,7 @@
 """YouTube acquisition (yt-dlp) unit tests — no network."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -12,23 +13,18 @@ from shotlist.acquire import (
     parse_youtube_video_id,
     validate_youtube_url,
 )
-from shotlist.config import Settings
+from shotlist.config import Settings, get_settings
 from shotlist.errors import InvalidVideoUrlError, VideoTooLongError
 
 
 def _settings(tmp_path: Path, max_duration: float = 90.0) -> Settings:
-    return Settings(
+    return replace(
+        get_settings(),
         output_dir=tmp_path / "out",
+        scratch_dir=tmp_path / "scratch",
         vision_backend="mock",
         transcript_backend="stub",
-        frame_interval_sec=1.0,
         max_video_duration_sec=max_duration,
-        frame_long_edge_px=768,
-        frame_jpeg_quality=85,
-        whisper_model="small",
-        whisper_compute_type="int8",
-        pipeline_version="0.1.0",
-        scratch_dir=tmp_path / "scratch",
     )
 
 
