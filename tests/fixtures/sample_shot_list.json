@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "video": {
+    "url": "https://www.youtube.com/shorts/abc123",
+    "video_id": "abc123",
+    "title": "Sample Short",
+    "channel": "Example Channel",
+    "duration_sec": 30.0,
+    "thumbnail_url": "https://i.ytimg.com/vi/abc123/hqdefault.jpg",
+    "analyzed_at": "2026-09-17T20:00:00+00:00"
+  },
+  "analysis": {
+    "vision_error_count": 0,
+    "pipeline_version": "0.1.0"
+  },
+  "transcript": {
+    "full_text": "Hello world. This is a test short.",
+    "segments": [
+      {"start_sec": 0.0, "end_sec": 2.5, "text": "Hello world."},
+      {"start_sec": 2.5, "end_sec": 5.0, "text": "This is a test short."}
+    ]
+  },
+  "shots": [
+    {
+      "index": 1,
+      "start_sec": 0.0,
+      "end_sec": 15.0,
+      "time_label": "0–15s",
+      "shot_type": "talking_head",
+      "visual": "Creator faces camera in kitchen",
+      "dialogue": "Hello world.",
+      "on_screen_text": "",
+      "framing": "medium",
+      "camera_movement": "static",
+      "role": "hook"
+    },
+    {
+      "index": 2,
+      "start_sec": 15.0,
+      "end_sec": 30.0,
+      "time_label": "15–30s",
+      "shot_type": "b_roll",
+      "visual": "Product on counter",
+      "dialogue": "This is a test short.",
+      "on_screen_text": "BUY NOW",
+      "role": "cta"
+    }
+  ]
+}
