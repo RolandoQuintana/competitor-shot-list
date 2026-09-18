@@ -1,4 +1,5 @@
 # competitor-shot-list
+A workflow to automate the process of re-creating a shot list from a competitor's video. Openrouter vision and STT models are used to generate artifacts like frame by frame analysis (1 frame per second) and transcripts. The artifacts are analyzed by a synthesizer model to create the final shot list.
 
 YouTube Short URL → `shot-list.json` + `shot-list.md` under `./output/<video-id>/`.
 
